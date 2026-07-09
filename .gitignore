@@ -52,3 +52,7 @@ logs/
 
 # OS
 Thumbs.db
+*.db
+*.db.gz
+*.tar.gz
+venv/
