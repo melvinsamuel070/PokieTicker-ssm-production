@@ -1,0 +1,14 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Build context is frontend/ so paths are relative to it
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+EXPOSE 7777
+
+CMD ["npx", "vite", "preview", "--port", "7777", "--host", "0.0.0.0"]

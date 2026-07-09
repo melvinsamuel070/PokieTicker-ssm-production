@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data files (mounted as volumes at runtime)
+pokieticker.db
+pokieticker.db.gz
+models.tar.gz
+backend/ml/models/
+
+# Git / docs
+.git/
+docs/
+
+# Env
+.env
