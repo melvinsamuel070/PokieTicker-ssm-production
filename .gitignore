@@ -55,4 +55,4 @@ Thumbs.db
 *.db
 *.db.gz
 *.tar.gz
-venv/
+venv/terraform-ec2/.terraform/
