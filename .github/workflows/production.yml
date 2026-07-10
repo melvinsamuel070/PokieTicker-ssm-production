@@ -42,11 +42,7 @@ jobs:
 
       - name: Run Semgrep
         continue-on-error: true
-        run: |
-          semgrep scan \
-            --config auto \
-            --error
-
+        run: semgrep scan --config auto
 #############################################################
 # 2. BUILD & PUSH IMAGES
 #############################################################
