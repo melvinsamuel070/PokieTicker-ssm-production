@@ -668,7 +668,7 @@ jobs:
               "APP_DIR=/home/ubuntu/app",
               "mkdir -p $APP_DIR",
               "cd $APP_DIR",
-              "if [ ! -d \".git\" ]; then git clone https://github.com/melvin-samuel/PokieTicker.git .; else git pull origin master; fi",
+              "if [ ! -d \".git\" ]; then git clone https://github.com/melvinsamuel070/PokieTicker.git .; else git pull origin master; fi",
               "echo \"${{ secrets.DOCKER_PASSWORD }}\" | docker login --username \"${{ secrets.DOCKER_USERNAME }}\" --password-stdin",
               "docker compose -f docker-compose.prod.yml pull",
               "docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary",
