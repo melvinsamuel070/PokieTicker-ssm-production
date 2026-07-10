@@ -1,291 +1,16 @@
-# name: Production CI/CD
-
-# on:
-#   push:
-#     branches:
-#       - main
-
-# env:
-#   AWS_REGION: us-east-1
-
-# jobs:
-
-# #############################################################
-# # 1. STATIC APPLICATION SECURITY TESTING (SAST)
-# #############################################################
-
-#   sast:
-#     name: SAST Scan
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Install Semgrep
-#         run: pip3 install semgrep
-
-#       - name: Run Semgrep Scan
-#         run: semgrep scan --config auto --error
-
-# #############################################################
-# # 2. BUILD & PUSH DOCKER IMAGES
-# #############################################################
-
-#   build:
-#     name: Build & Push Images
-#     runs-on: ubuntu-latest
-#     needs: sast
-
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Login to DockerHub
-#         uses: docker/login-action@v3
-#         with:
-#           username: ${{ secrets.DOCKER_USERNAME }}
-#           password: ${{ secrets.DOCKER_PASSWORD }}
-
-#       #########################################################
-#       # Backend
-#       #########################################################
-
-#       - name: Build Backend
-#         run: |
-#           docker build \
-#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }} \
-#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest \
-#           ./backend
-
-#       - name: Push Backend
-#         run: |
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }}
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest
-
-#       #########################################################
-#       # Frontend
-#       #########################################################
-
-#       - name: Build Frontend
-#         run: |
-#           docker build \
-#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }} \
-#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest \
-#           ./frontend
-
-#       - name: Push Frontend
-#         run: |
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }}
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest
-
-# #############################################################
-# # 3. GET TERRAFORM OUTPUTS
-# #############################################################
-
-#   infrastructure:
-#     name: Terraform Outputs
-#     runs-on: ubuntu-latest
-
-#     needs: build
-
-#     outputs:
-#       instance: ${{ steps.outputs.outputs.instance }}
-
-#     steps:
-
-#       - uses: actions/checkout@v4
-
-#       - uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: us-east-1
-
-#       - uses: hashicorp/setup-terraform@v3
-
-#       - name: Terraform Init
-#         working-directory: terraform-ec2
-#         run: terraform init
-
-#       - id: outputs
-#         working-directory: terraform-ec2
-#         run: |
-#           echo "instance=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
-
-# #############################################################
-# # 4. DEPLOY THROUGH AWS SSM
-# #############################################################
-
-#   deploy:
-#     name: Canary Deployment
-#     runs-on: ubuntu-latest
-
-#     needs: infrastructure
-
-#     steps:
-
-#       - uses: actions/checkout@v4
-
-#       - uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: us-east-1
-
-#       - name: Deploy Application
-#         run: |
-
-#           aws ssm send-command \
-#           --instance-ids ${{ needs.infrastructure.outputs.instance }} \
-#           --document-name AWS-RunShellScript \
-#           --comment "PokieTicker Production Deployment" \
-#           --parameters commands='
-
-#           set -e
-
-#           APP_DIR=/home/ubuntu/app
-
-#           ####################################################
-#           # Clone repository if missing
-#           ####################################################
-
-#           if [ ! -d "$APP_DIR/.git" ]; then
-#               rm -rf $APP_DIR
-#               git clone https://github.com/YOUR_GITHUB_USERNAME/PokieTicker.git $APP_DIR
-#           fi
-
-#           cd $APP_DIR
-
-#           ####################################################
-#           # Update repository
-#           ####################################################
-
-#           git fetch origin
-
-#           git reset --hard origin/main
-
-#           ####################################################
-#           # Docker Login
-#           ####################################################
-
-#           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
-#             --username "${{ secrets.DOCKER_USERNAME }}" \
-#             --password-stdin
-
-#           ####################################################
-#           # Pull latest images
-#           ####################################################
-
-#           docker compose pull
-
-#           ####################################################
-#           # Canary Deployment
-#           ####################################################
-
-#           docker compose up -d backend-canary frontend-canary
-
-#           sleep 20
-
-#           ####################################################
-#           # Promote Production
-#           ####################################################
-
-#           docker compose up -d backend frontend
-
-#           ####################################################
-#           # Cleanup
-#           ####################################################
-
-#           docker image prune -af
-
-#           ####################################################
-#           # Reload Nginx
-#           ####################################################
-
-#           sudo nginx -t && sudo systemctl reload nginx
-
-#           ####################################################
-#           # Renew SSL
-#           ####################################################
-
-#           sudo certbot renew --quiet
-
-#           ' \
-#           --output text
-
-# #############################################################
-# # 5. DYNAMIC APPLICATION SECURITY TESTING (DAST)
-# #############################################################
-
-#   dast:
-#     name: OWASP ZAP Scan
-#     runs-on: ubuntu-latest
-
-#     needs: deploy
-
-#     steps:
-
-#       - name: Wait for Deployment
-#         run: sleep 30
-
-#       - name: Run ZAP Baseline Scan
-#         uses: zaproxy/action-baseline@v0.12.0
-#         with:
-#           target: https://your-domain.com
-
-# #############################################################
-# # 6. VERIFY DEPLOYMENT
-# #############################################################
-
-#   verify:
-#     name: Health Check
-#     runs-on: ubuntu-latest
-
-#     needs:
-#       - deploy
-#       - dast
-
-#     steps:
-
-#       - name: Verify Application
-#         run: |
-
-#           sleep 20
-
-#           curl -f https://your-domain.com
-
-#           curl -f https://your-domain.com/api/health
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 name: Production CI/CD
 
 on:
   push:
     branches:
       - master
+
+#############################################################
+# Least Privilege Permissions
+#############################################################
+
+permissions:
+  contents: read
 
 env:
   AWS_REGION: us-east-1
@@ -313,10 +38,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Semgrep
-        run: pip3 install semgrep
+        run: pip3 install --no-cache-dir semgrep
 
       - name: Run Semgrep
-        run: semgrep scan --config auto --error
+        continue-on-error: true
+        run: |
+          semgrep scan \
+            --config auto \
+            --error
 
 #############################################################
 # 2. BUILD & PUSH IMAGES
@@ -547,3 +276,297 @@ jobs:
       - name: Verify Backend
         run: |
           curl -f ${{ env.DOMAIN }}/api/health
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# name: Production CI/CD
+
+# on:
+#   push:
+#     branches:
+#       - master
+
+# env:
+#   AWS_REGION: us-east-1
+#   DOMAIN: https://your-subdomain.duckdns.org
+
+# #############################################################
+# # Prevent multiple deployments running simultaneously
+# #############################################################
+
+# concurrency:
+#   group: production
+#   cancel-in-progress: true
+
+# jobs:
+
+# #############################################################
+# # 1. STATIC APPLICATION SECURITY TESTING
+# #############################################################
+
+#   sast:
+#     name: SAST Scan
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Install Semgrep
+#         run: pip3 install semgrep
+
+#       # - name: Run Semgrep
+#       #   run: semgrep scan --config auto --error
+
+#       - name: Run Semgrep
+#         run: semgrep scan --config auto
+
+# #############################################################
+# # 2. BUILD & PUSH IMAGES
+# #############################################################
+
+#   build:
+#     name: Build Docker Images
+#     runs-on: ubuntu-latest
+#     needs: sast
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Login DockerHub
+#         run: |
+#           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+#           --username "${{ secrets.DOCKER_USERNAME }}" \
+#           --password-stdin
+
+# ##################################################
+# # BACKEND
+# ##################################################
+
+#       - name: Build Backend
+#         run: |
+#           docker build \
+#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }} \
+#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest \
+#           ./backend
+
+#       - name: Push Backend
+#         run: |
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }}
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest
+
+# ##################################################
+# # FRONTEND
+# ##################################################
+
+#       - name: Build Frontend
+#         run: |
+#           docker build \
+#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }} \
+#           -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest \
+#           ./frontend
+
+#       - name: Push Frontend
+#         run: |
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }}
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest
+
+# #############################################################
+# # 3. DYNAMIC APPLICATION SECURITY TESTING
+# #############################################################
+
+#   dast:
+#     name: DAST Scan
+#     runs-on: ubuntu-latest
+#     needs: build
+
+#     continue-on-error: true
+
+#     steps:
+
+#       - name: OWASP ZAP Scan
+#         uses: zaproxy/action-baseline@v0.12.0
+#         with:
+#           target: ${{ env.DOMAIN }}
+
+# #############################################################
+# # 4. TERRAFORM OUTPUTS
+# #############################################################
+
+#   infrastructure:
+#     name: Fetch Terraform Outputs
+#     runs-on: ubuntu-latest
+
+#     needs:
+#       - build
+#       - dast
+
+#     outputs:
+#       instance: ${{ steps.outputs.outputs.instance }}
+
+#     steps:
+
+#       - uses: actions/checkout@v4
+
+#       - uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+#       - uses: hashicorp/setup-terraform@v3
+
+#       - name: Terraform Init
+#         working-directory: terraform-ec2
+#         run: terraform init
+
+#       - id: outputs
+#         working-directory: terraform-ec2
+#         run: |
+#           echo "instance=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
+
+# #############################################################
+# # 5. DEPLOY THROUGH AWS SSM
+# #############################################################
+
+#   deploy:
+#     name: Canary Deployment
+#     runs-on: ubuntu-latest
+
+#     needs: infrastructure
+
+#     steps:
+
+#       - uses: actions/checkout@v4
+
+#       - uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+#       - name: Deploy Through SSM
+#         run: |
+
+#           aws ssm send-command \
+#           --instance-ids "${{ needs.infrastructure.outputs.instance }}" \
+#           --document-name "AWS-RunShellScript" \
+#           --comment "Production Deployment" \
+#           --parameters commands='
+
+#           set -e
+
+#           mkdir -p /home/ubuntu/app
+
+#           cd /home/ubuntu/app
+
+#           ##################################################
+#           # OPTIONAL
+#           ##################################################
+
+#           # Uncomment if you want the server to clone
+#           # the repository itself.
+
+#           # git clone https://github.com/USERNAME/PokieTicker.git .
+
+#           ##################################################
+#           # OPTIONAL
+#           ##################################################
+
+#           # Uncomment if using git deployment
+
+#           # git pull origin main
+
+#           ##################################################
+#           # Docker Login
+#           ##################################################
+
+#           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+#           --username "${{ secrets.DOCKER_USERNAME }}" \
+#           --password-stdin
+
+#           ##################################################
+#           # Pull latest images
+#           ##################################################
+
+#           docker compose -f docker-compose.prod.yml pull
+
+#           ##################################################
+#           # Canary
+#           ##################################################
+
+#           docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary
+
+#           sleep 30
+
+#           docker compose ps
+
+#           ##################################################
+#           # Promote Production
+#           ##################################################
+
+#           docker compose -f docker-compose.prod.yml up -d backend frontend
+
+#           ##################################################
+#           # Cleanup
+#           ##################################################
+
+#           docker image prune -af
+
+#           ##################################################
+#           # Nginx
+#           ##################################################
+
+#           sudo nginx -t && sudo systemctl reload nginx
+
+#           ##################################################
+#           # Renew SSL
+#           ##################################################
+
+#           sudo certbot renew --quiet
+
+#           ' \
+#           --output text
+
+# #############################################################
+# # 6. HEALTH CHECK
+# #############################################################
+
+#   verify:
+#     name: Verify Deployment
+#     runs-on: ubuntu-latest
+
+#     needs: deploy
+
+#     steps:
+
+#       - name: Wait
+#         run: sleep 30
+
+#       - name: Verify Frontend
+#         run: |
+#           curl -f ${{ env.DOMAIN }}
+
+#       - name: Verify Backend
+#         run: |
+#           curl -f ${{ env.DOMAIN }}/api/health

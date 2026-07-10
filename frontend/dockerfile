@@ -11,4 +11,8 @@ RUN npm run build
 
 EXPOSE 7777
 
+RUN addgroup -S app && adduser -S app -G app
+
+USER app
+
 CMD ["npx", "vite", "preview", "--port", "7777", "--host", "0.0.0.0"]
