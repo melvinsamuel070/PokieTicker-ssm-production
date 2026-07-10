@@ -98,3 +98,7 @@ chown -R ubuntu:ubuntu /app
 ##################################################
 
 echo "Provisioning completed successfully."
+
+sudo apt update
+
+sudo apt install -y git
