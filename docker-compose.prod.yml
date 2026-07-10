@@ -2,7 +2,7 @@ services:
 
   backend:
 
-    image: YOUR_DOCKER_USERNAME/pokieticker-backend:latest
+    image: ${DOCKER_USERNAME}/pokieticker-backend:latest
 
     container_name: pokieticker-backend
 
@@ -26,7 +26,7 @@ services:
 
   frontend:
 
-    image: YOUR_DOCKER_USERNAME/pokieticker-frontend:latest
+    image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
 
     container_name: pokieticker-frontend
 
@@ -48,7 +48,7 @@ services:
 
   backend-canary:
 
-    image: YOUR_DOCKER_USERNAME/pokieticker-backend:latest
+    image: ${DOCKER_USERNAME}/pokieticker-backend:latest
 
     container_name: pokieticker-backend-canary
 
@@ -67,7 +67,7 @@ services:
 
   frontend-canary:
 
-    image: YOUR_DOCKER_USERNAME/pokieticker-frontend:latest
+    image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
 
     container_name: pokieticker-frontend-canary
 
