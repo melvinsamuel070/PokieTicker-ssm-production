@@ -605,16 +605,19 @@ jobs:
 # Export Terraform Outputs
 ##################################################
 
+      ##################################################
+# Export Terraform Outputs
+##################################################
+
       - id: tf_outputs
         working-directory: terraform-ec2
         run: |
+          # Force Terraform to read the latest state from your backend/file
+          terraform refresh
 
           echo "instance=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
-
           echo "public_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
-
           echo "subnet=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
-
           echo "vpc=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
 ##################################################
 # Display Outputs
