@@ -605,7 +605,7 @@ jobs:
 # Export Terraform Outputs
 ##################################################
 
-      - id: outputs
+      - id: tf_outputs
         working-directory: terraform-ec2
         run: |
 
@@ -616,7 +616,6 @@ jobs:
           echo "subnet=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
 
           echo "vpc=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
-
 ##################################################
 # Display Outputs
 ##################################################
