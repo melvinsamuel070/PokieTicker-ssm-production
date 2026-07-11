@@ -89,7 +89,6 @@
 
 
 
-
 services:
 
   backend:
@@ -107,8 +106,8 @@ services:
       - ./data:/data
       - ./backend/ml/models:/app/backend/ml/models
 
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
 
     healthcheck:
       test:
@@ -128,8 +127,8 @@ services:
     container_name: pokieticker-frontend
     restart: unless-stopped
 
-    expose:
-      - "7777"
+    ports:
+      - "127.0.0.1:7777:7777"
 
     depends_on:
       backend:
