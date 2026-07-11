@@ -1,35 +1,131 @@
+# services:
+
+#   backend:
+
+#     image: ${DOCKER_USERNAME}/pokieticker-backend:latest
+
+#     container_name: pokieticker-backend
+
+#     restart: unless-stopped
+
+#     env_file:
+#       - .env
+
+#     volumes:
+#       - ./pokieticker.db:/app/pokieticker.db
+#       - ./backend/ml/models:/app/backend/ml/models
+
+#     expose:
+#       - "8000"
+
+#     healthcheck:
+#       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+
+#   frontend:
+
+#     image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
+
+#     container_name: pokieticker-frontend
+
+#     restart: unless-stopped
+
+#     expose:
+#       - "7777"
+
+#     depends_on:
+#       backend:
+#         condition: service_healthy
+
+#     environment:
+#       - VITE_API_TARGET=http://backend:8000
+
+# ##########################################################
+# # CANARY
+# ##########################################################
+
+#   backend-canary:
+
+#     image: ${DOCKER_USERNAME}/pokieticker-backend:latest
+
+#     container_name: pokieticker-backend-canary
+
+#     profiles:
+#       - canary
+
+#     env_file:
+#       - .env
+
+#     volumes:
+#       - ./pokieticker.db:/app/pokieticker.db
+#       - ./backend/ml/models:/app/backend/ml/models
+
+#     expose:
+#       - "8000"
+
+#   frontend-canary:
+
+#     image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
+
+#     container_name: pokieticker-frontend-canary
+
+#     profiles:
+#       - canary
+
+#     depends_on:
+#       - backend-canary
+
+#     expose:
+#       - "7777"
+
+#     environment:
+#       - VITE_API_TARGET=http://backend-canary:8000
+
+
+
+
+
+
+
+
 services:
 
   backend:
-
     image: ${DOCKER_USERNAME}/pokieticker-backend:latest
-
     container_name: pokieticker-backend
-
     restart: unless-stopped
 
     env_file:
       - .env
 
+    environment:
+      DATABASE_PATH: /data/pokieticker.db
+
     volumes:
-      - ./pokieticker.db:/app/pokieticker.db
+      - ./data:/data
       - ./backend/ml/models:/app/backend/ml/models
 
     expose:
       - "8000"
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 20s
 
   frontend:
-
     image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
-
     container_name: pokieticker-frontend
-
     restart: unless-stopped
 
     expose:
@@ -40,16 +136,10 @@ services:
         condition: service_healthy
 
     environment:
-      - VITE_API_TARGET=http://backend:8000
-
-##########################################################
-# CANARY
-##########################################################
+      VITE_API_TARGET: http://backend:8000
 
   backend-canary:
-
     image: ${DOCKER_USERNAME}/pokieticker-backend:latest
-
     container_name: pokieticker-backend-canary
 
     profiles:
@@ -58,27 +148,28 @@ services:
     env_file:
       - .env
 
+    environment:
+      DATABASE_PATH: /data/pokieticker.db
+
     volumes:
-      - ./pokieticker.db:/app/pokieticker.db
+      - ./data-canary:/data
       - ./backend/ml/models:/app/backend/ml/models
 
     expose:
       - "8000"
 
   frontend-canary:
-
     image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
-
     container_name: pokieticker-frontend-canary
 
     profiles:
       - canary
 
-    depends_on:
-      - backend-canary
-
     expose:
       - "7777"
 
+    depends_on:
+      - backend-canary
+
     environment:
-      - VITE_API_TARGET=http://backend-canary:8000
+      VITE_API_TARGET: http://backend-canary:8000
