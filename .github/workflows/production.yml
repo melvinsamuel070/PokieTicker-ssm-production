@@ -756,9 +756,12 @@ jobs:
 ##################################################
 
       - name: Update DuckDNS
+        env:
+          DUCKDNS_SUBDOMAIN: ${{ secrets.DUCKDNS_SUBDOMAIN }}
+          DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
         run: |
-          SUBDOMAIN=$(echo -n "${{ secrets.DUCKDNS_SUBDOMAIN }}" | tr -d '[:space:]')
-          TOKEN=$(echo -n "${{ secrets.DUCKDNS_TOKEN }}" | tr -d '[:space:]')
+          SUBDOMAIN=$(printf '%s' "$DUCKDNS_SUBDOMAIN" | tr -d '[:space:]')
+          TOKEN=$(printf '%s' "$DUCKDNS_TOKEN" | tr -d '[:space:]')
           IP="${{ steps.outputs.outputs.public_ip }}"
           curl -s "https://www.duckdns.org/update?domains=${SUBDOMAIN}&token=${TOKEN}&ip=${IP}"
 
