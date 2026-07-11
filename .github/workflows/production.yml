@@ -629,7 +629,12 @@ jobs:
           echo "Public IP   : $(terraform output -raw instance_public_ip)"
           echo "Subnet      : $(terraform output -raw public_subnet_id)"
           echo "VPC         : $(terraform output -raw vpc_id)"
-
+##################################################
+# Update DuckDNS Record
+##################################################
+      - name: Update DuckDNS
+        run: |
+          curl -s "https://www.duckdns.org/update?domains=${{ secrets.DUCKDNS_SUBDOMAIN }}&token=${{ secrets.DUCKDNS_TOKEN }}&ip=${{ steps.outputs.outputs.public_ip }}"
 #############################################################
 # 4. DEPLOY THROUGH AWS SSM
 #############################################################
