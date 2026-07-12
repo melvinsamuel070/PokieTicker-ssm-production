@@ -23,13 +23,12 @@ env:
   # simply change http:// to https://
   ###########################################################
   DOMAIN: http://${{ secrets.DUCKDNS_SUBDOMAIN }}.duckdns.org
-
 #############################################################
 # Prevent multiple deployments running simultaneously
 #############################################################
 
 concurrency:
-  group: production
+  group: production  
   cancel-in-progress: true
 
 jobs:
