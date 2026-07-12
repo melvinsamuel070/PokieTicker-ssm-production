@@ -249,6 +249,14 @@ chown -R ubuntu:ubuntu /home/ubuntu/app
 
 ##################################################
 # Finished
+#
+# Marker file lets the GitHub Actions pipeline poll
+# for real completion instead of guessing with a fixed
+# sleep — Docker/nginx/AWS CLI installs can take longer
+# than 60s on a fresh instance.
 ##################################################
+
+touch /home/ubuntu/.provisioning-complete
+chown ubuntu:ubuntu /home/ubuntu/.provisioning-complete
 
 echo "Provisioning completed successfully."
