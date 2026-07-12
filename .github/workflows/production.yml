@@ -349,7 +349,6 @@ jobs:
 ##################################################
 # Deploy Through AWS SSM
 ##################################################
-
       - name: Deploy Application
         id: deploy
         run: |
@@ -412,7 +411,7 @@ jobs:
           fi
 
 ##################################################
-# Verify Deployment Status
+# Verify Deployment Statuss
 ##################################################
 
       - name: Check Deployment Status
