@@ -373,25 +373,10 @@ jobs:
               "export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}",
               "echo \"${{ secrets.DOCKER_PASSWORD }}\" | docker login --username \"${{ secrets.DOCKER_USERNAME }}\" --password-stdin",
               "docker compose -f docker-compose.prod.yml pull",
-
-
-              # "docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary",
-              # "sleep 30",
-              # "docker compose -f docker-compose.prod.yml ps",
-              # "docker compose -f docker-compose.prod.yml up -d backend frontend",
-              
-
               "docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary",
               "sleep 30",
-              "CANARY_HEALTH=$(docker inspect --format='\''{{.State.Health.Status}}'\'' pokieticker-backend-canary || echo unknown)",
-              "echo Canary health: $CANARY_HEALTH",
-              "if [ \"$CANARY_HEALTH\" != \"healthy\" ]; then echo CANARY UNHEALTHY - ABORTING DEPLOYMENT; docker compose -f docker-compose.prod.yml --profile canary logs backend-canary; exit 1; fi",
-              "echo Canary passed health check, proceeding to production",
+              "docker compose -f docker-compose.prod.yml ps",
               "docker compose -f docker-compose.prod.yml up -d backend frontend",
-              "docker compose -f docker-compose.prod.yml --profile canary stop backend-canary frontend-canary",
-
-              
-
               "cat > backend/ml/models/_run_ai_pipeline.py << '\''PYEOF'\''\nfrom backend.pipeline.alignment import align_news_for_symbol\nfrom backend.pipeline.layer0 import run_layer0\nfrom backend.pipeline.layer1 import run_layer1\n\nSYMBOLS = ['\''AAPL'\'', '\''BABA'\'', '\''GLD'\'', '\''NVDA'\'', '\''TSLA'\'']\n\nfor s in SYMBOLS:\n    print('\''=='\'', s, '\''=='\'')\n    print('\''align:'\'', align_news_for_symbol(s))\n    print('\''layer0:'\'', run_layer0(s))\n    print('\''layer1:'\'', run_layer1(s, max_articles=5000))\nPYEOF",
               "cat > run_pipeline.sh << '\''SCRIPTEOF'\''\n#!/bin/bash\ncd /home/ubuntu/app\ndocker compose -f docker-compose.prod.yml exec -T backend python -m backend.migration\ndocker compose -f docker-compose.prod.yml exec -T backend python -m backend.bulk_fetch\nANTHROPIC_KEY=$(grep '\''^ANTHROPIC_API_KEY='\'' .env | cut -d= -f2)\nif [ -n \"$ANTHROPIC_KEY\" ] && [ \"$ANTHROPIC_KEY\" != \"your_anthropic_api_key_here\" ]; then\n  echo Anthropic key detected, running AI pipeline\n  docker compose -f docker-compose.prod.yml exec -T backend python /app/backend/ml/models/_run_ai_pipeline.py\n  docker compose -f docker-compose.prod.yml exec -T backend python -m backend.ml.model\nelse\n  echo No Anthropic key configured yet, skipping AI pipeline\nfi\nSCRIPTEOF",
               "chmod +x run_pipeline.sh",
