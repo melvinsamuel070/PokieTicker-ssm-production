@@ -1,543 +1,3 @@
-# name: Production CI/CD
-
-# on:
-#   push:
-#     branches:
-#       - master
-
-# #############################################################
-# # Least Privilege Permissions
-# #############################################################
-
-# permissions:
-#   contents: read
-#   issues: write
-
-# env:
-#   AWS_REGION: us-east-1
-
-#   ###########################################################
-#   # Use HTTP initially.
-#   #
-#   # After manually configuring Certbot,
-#   # simply change http:// to https://
-#   ###########################################################
-#   DOMAIN: http://${{ secrets.DUCKDNS_SUBDOMAIN }}.duckdns.org
-# #############################################################
-# # Prevent multiple deployments running simultaneously
-# #############################################################
-
-# concurrency:
-#   group: production  
-#   cancel-in-progress: true
-
-# jobs:
-
-# #############################################################
-# # 1. STATIC APPLICATION SECURITY TESTING
-# #############################################################
-
-#   sast:
-#     name: SAST Scan
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       - uses: actions/checkout@v4
-
-#       - name: Install Semgrep
-#         run: pip3 install --no-cache-dir semgrep
-
-#       - name: Run Semgrep
-#         continue-on-error: true
-#         run: |
-#           semgrep scan --config auto
-
-# #############################################################
-# # 2. BUILD & PUSH IMAGES
-# #############################################################
-
-#   build:
-#     name: Build Docker Images
-#     runs-on: ubuntu-latest
-
-#     needs: sast
-
-#     steps:
-
-#       - uses: actions/checkout@v4
-
-# ##################################################
-# # Login DockerHub
-# ##################################################
-
-#       - name: Login DockerHub
-#         run: |
-#           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
-#           --username "${{ secrets.DOCKER_USERNAME }}" \
-#           --password-stdin
-
-# ##################################################
-# # BACKEND
-# ##################################################
-
-#       - name: Build Backend
-#         run: |
-#           docker build \
-#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }} \
-#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest \
-#             ./backend
-
-#       - name: Push Backend
-#         run: |
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }}
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest
-
-# ##################################################
-# # FRONTEND
-# ##################################################
-
-#       - name: Build Frontend
-#         run: |
-#           docker build \
-#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }} \
-#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest \
-#             ./frontend
-
-#       - name: Push Frontend
-#         run: |
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }}
-#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest
-
-# #############################################################
-# # 3. PROVISION INFRASTRUCTURE
-# #############################################################
-
-#   infrastructure:
-#     name: Provision Infrastructure
-#     runs-on: ubuntu-latest
-
-#     needs:
-#       - build
-
-#     outputs:
-#       instance: ${{ steps.outputs.outputs.instance }}
-#       public_ip: ${{ steps.outputs.outputs.public_ip }}
-#       subnet: ${{ steps.outputs.outputs.subnet }}
-#       vpc: ${{ steps.outputs.outputs.vpc }}
-
-#     steps:
-
-# ##################################################
-# # Checkout
-# ##################################################
-
-#       - uses: actions/checkout@v4
-
-# ##################################################
-# # Configure AWS
-# ##################################################
-
-#       - uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ env.AWS_REGION }}
-
-# ##################################################
-# # Install Terraform
-# ##################################################
-
-#       - uses: hashicorp/setup-terraform@v3
-
-# ##################################################
-# # Terraform Format Check
-# ##################################################
-
-#       - name: Terraform Format
-#         working-directory: terraform-ec2
-#         run: terraform fmt -check -recursive
-
-# ##################################################
-# # Terraform Init
-# ##################################################
-
-#       - name: Terraform Init
-#         working-directory: terraform-ec2
-#         run: terraform init
-
-# ##################################################
-# # Terraform Validate
-# ##################################################
-
-#       - name: Terraform Validate
-#         working-directory: terraform-ec2
-#         run: terraform validate
-
-# ##################################################
-# # Terraform Plan
-# ##################################################
-
-#       - name: Terraform Plan
-#         working-directory: terraform-ec2
-#         run: terraform plan -out=tfplan
-
-# ##################################################
-# # Terraform Apply
-# ##################################################
-
-#       - name: Terraform Apply
-#         working-directory: terraform-ec2
-#         run: terraform apply -auto-approve tfplan
-
-# ##################################################
-# # Wait For EC2 Boot
-# ##################################################
-
-#       - name: Wait for EC2 Initialization
-#         run: |
-#           echo "Waiting for EC2 to boot..."
-#           sleep 60
-
-# ##################################################
-# # Wait Until SSM Registers Instance
-# ##################################################
-
-#       - name: Wait for SSM Registration
-#         working-directory: terraform-ec2
-#         run: |
-
-#           INSTANCE_ID=$(terraform output -raw instance_id)
-
-#           echo "Waiting for SSM registration..."
-
-#           for i in {1..30}; do
-
-#             STATUS=$(aws ssm describe-instance-information \
-#               --region ${{ env.AWS_REGION }} \
-#               --query "InstanceInformationList[?InstanceId=='$INSTANCE_ID'].PingStatus" \
-#               --output text)
-
-#             if [ "$STATUS" = "Online" ]; then
-#               echo "Instance is online in SSM."
-#               exit 0
-#             fi
-
-#             echo "Attempt $i: Instance not ready..."
-#             sleep 10
-
-#           done
-
-#           echo "Timed out waiting for SSM."
-#           exit 1
-
-# ##################################################
-# # Wait For Userdata Provisioning To Finish
-# #
-# # SSM being online only means the agent registered —
-# # it does NOT mean userdata.sh (Docker install, nginx
-# # setup, etc.) has finished running. Poll for the real
-# # completion marker instead of guessing with a sleep.
-# ##################################################
-
-#       - name: Wait for Provisioning Complete
-#         working-directory: terraform-ec2
-#         run: |
-#           INSTANCE_ID=$(terraform output -raw instance_id)
-#           echo "Waiting for userdata.sh to finish (Docker install, nginx setup)..."
-
-#           for i in {1..30}; do
-#             COMMAND_ID=$(aws ssm send-command \
-#               --instance-ids "$INSTANCE_ID" \
-#               --document-name "AWS-RunShellScript" \
-#               --parameters 'commands=["test -f /home/ubuntu/.provisioning-complete"]' \
-#               --query "Command.CommandId" --output text)
-
-#             sleep 5
-
-#             STATUS=$(aws ssm get-command-invocation \
-#               --command-id "$COMMAND_ID" \
-#               --instance-id "$INSTANCE_ID" \
-#               --query "Status" --output text 2>/dev/null || echo "Failed")
-
-#             if [ "$STATUS" = "Success" ]; then
-#               echo "Provisioning complete."
-#               exit 0
-#             fi
-
-#             echo "Attempt $i: still provisioning..."
-#             sleep 15
-#           done
-
-#           echo "Timed out waiting for provisioning to complete."
-#           exit 1
-
-# ##################################################
-# # Export Terraform Outputs
-# ##################################################
-
-#       - id: outputs
-#         working-directory: terraform-ec2
-#         run: |
-
-#           echo "instance=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
-
-#           echo "public_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
-
-#           echo "subnet=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
-
-#           echo "vpc=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
-
-# ##################################################
-# # Display Outputs
-# ##################################################
-
-#       - name: Display Outputs
-#         working-directory: terraform-ec2
-#         run: |
-
-#           echo "Instance ID : $(terraform output -raw instance_id)"
-#           echo "Public IP   : $(terraform output -raw instance_public_ip)"
-#           echo "Subnet      : $(terraform output -raw public_subnet_id)"
-#           echo "VPC         : $(terraform output -raw vpc_id)"
-
-# ##################################################
-# # Debug Secret Lengths
-# ##################################################
-
-#       - name: Debug Secret Lengths
-#         run: |
-#           echo "Subdomain length: ${#DUCKDNS_SUBDOMAIN}"
-#           echo "Token length: ${#DUCKDNS_TOKEN}"
-#         env:
-#           DUCKDNS_SUBDOMAIN: ${{ secrets.DUCKDNS_SUBDOMAIN }}
-#           DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
-
-# ##################################################
-# # Update DuckDNS Record
-# ##################################################
-
-#       - name: Update DuckDNS
-#         env:
-#           DUCKDNS_SUBDOMAIN: ${{ secrets.DUCKDNS_SUBDOMAIN }}
-#           DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
-#         run: |
-#           SUBDOMAIN=$(printf '%s' "$DUCKDNS_SUBDOMAIN" | tr -d '[:space:]')
-#           TOKEN=$(printf '%s' "$DUCKDNS_TOKEN" | tr -d '[:space:]')
-#           IP="${{ steps.outputs.outputs.public_ip }}"
-#           curl -s "https://www.duckdns.org/update?domains=${SUBDOMAIN}&token=${TOKEN}&ip=${IP}"
-
-# #############################################################
-# # 4. DEPLOY THROUGH AWS SSM
-# #############################################################
-
-#   deploy:
-#     name: Canary Deployment
-#     runs-on: ubuntu-latest
-
-#     needs: infrastructure
-
-#     steps:
-
-#       - uses: actions/checkout@v4
-
-#       - uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ env.AWS_REGION }}
-
-# ##################################################
-# # Deploy Through AWS SSM
-# ##################################################
-#       - name: Deploy Application
-#         id: deploy
-#         run: |
-#           COMMAND_ID=$(aws ssm send-command \
-#             --instance-ids "${{ needs.infrastructure.outputs.instance }}" \
-#             --document-name "AWS-RunShellScript" \
-#             --comment "Production Deployment" \
-#             --query "Command.CommandId" \
-#             --output text \
-#             --parameters '{"commands":[
-#               "set -e",
-#               "export HOME=/root",
-#               "APP_DIR=/home/ubuntu/app",
-#               "mkdir -p $APP_DIR",
-#               "cd $APP_DIR",
-#               "git config --global --add safe.directory $APP_DIR",
-#               "if [ ! -d \".git\" ]; then git clone https://github.com/melvinsamuel070/PokieTicker-ssm-production.git .; else git fetch origin && git reset --hard origin/master; fi",
-#               "mkdir -p data data-canary backend/ml/models",
-#               "chown -R 100:101 data data-canary backend/ml/models",
-#               "cat > .env << '\''ENVEOF'\''\nDOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}\nPOLYGON_API_KEY=${{ secrets.POLYGON_API_KEY }}\nANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}\nENVEOF",
-#               "ls -la",
-#               "export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}",
-#               "echo \"${{ secrets.DOCKER_PASSWORD }}\" | docker login --username \"${{ secrets.DOCKER_USERNAME }}\" --password-stdin",
-#               "docker compose -f docker-compose.prod.yml pull",
-#               "docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary",
-#               "sleep 30",
-#               "docker compose -f docker-compose.prod.yml ps",
-#               "docker compose -f docker-compose.prod.yml up -d backend frontend",
-#               "docker image prune -af",
-#               "sudo nginx -t",
-#               "sudo systemctl reload nginx",
-#               "sudo certbot renew --quiet || true",
-#               "echo \"Deployment Complete\""
-#             ]}')
-#           echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
-# ##################################################
-# # Wait For Deployment & Stream Logs on Failure
-# ##################################################
-
-#       - name: Wait For Deployment
-#         run: |
-#           echo "Waiting for SSM Command to finish..."
-          
-#           if ! aws ssm wait command-executed \
-#             --command-id "${{ env.COMMAND_ID }}" \
-#             --instance-id "${{ needs.infrastructure.outputs.instance }}"; then
-            
-#             echo "=================================================="
-#             echo " CRITICAL: DEPLOYMENT COMMAND FAILED"
-#             echo "=================================================="
-            
-#             aws ssm get-command-invocation \
-#               --command-id "${{ env.COMMAND_ID }}" \
-#               --instance-id "${{ needs.infrastructure.outputs.instance }}" \
-#               --query "{Status:Status,Error:StandardErrorContent,Output:StandardOutputContent}" \
-#               --output json
-              
-#             exit 1
-#           fi
-
-# ##################################################
-# # Verify Deployment Statuss
-# ##################################################
-
-#       - name: Check Deployment Status
-#         run: |
-
-#           STATUS=$(aws ssm get-command-invocation \
-#             --command-id "${{ env.COMMAND_ID }}" \
-#             --instance-id "${{ needs.infrastructure.outputs.instance }}" \
-#             --query Status \
-#             --output text)
-
-#           echo "Deployment Completed with Status: $STATUS"
-
-# #############################################################
-# # 5. VERIFY DEPLOYMENT
-# #############################################################
-
-#   verify:
-#     name: Verify Deployment
-#     runs-on: ubuntu-latest
-
-#     needs:
-#       - deploy
-#       - infrastructure
-
-#     steps:
-
-# ##################################################
-# # Wait for Services
-# ##################################################
-
-#       - name: Wait
-#         run: sleep 60
-
-# ##################################################
-# # Configure AWS Credentials
-# ##################################################
-
-#       - uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#           aws-region: ${{ env.AWS_REGION }}
-
-# ##################################################
-# # Check Containers
-# ##################################################
-
-#       - name: Verify Containers
-#         run: |
-
-#           aws ssm send-command \
-#           --instance-ids "${{ needs.infrastructure.outputs.instance }}" \
-#           --document-name "AWS-RunShellScript" \
-#           --parameters commands='
-
-#           docker ps
-
-#           docker compose -f /home/ubuntu/app/docker-compose.prod.yml ps
-
-#           ' \
-#           --output text
-
-# ##################################################
-# # Verify Frontend
-# ##################################################
-
-#       - name: Verify Frontend
-#         run: |
-
-#           curl \
-#           --retry 10 \
-#           --retry-delay 10 \
-#           --retry-all-errors \
-#           --fail \
-#           ${{ env.DOMAIN }}
-
-# ##################################################
-# # Verify Backend API
-# ##################################################
-
-#       - name: Verify Backend
-#         run: |
-
-#           curl \
-#           --retry 10 \
-#           --retry-delay 10 \
-#           --retry-all-errors \
-#           --fail \
-#           ${{ env.DOMAIN }}/api/health
-
-# ##################################################
-# # Finished
-# ##################################################
-
-#       - name: Success
-#         run: |
-#           echo "===================================="
-#           echo "Production Deployment Successful"
-#           echo "===================================="
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 name: Production CI/CD
 
 on:
@@ -917,10 +377,10 @@ jobs:
               "sleep 30",
               "docker compose -f docker-compose.prod.yml ps",
               "docker compose -f docker-compose.prod.yml up -d backend frontend",
-              "docker compose -f docker-compose.prod.yml exec -T backend python -m backend.migration",
-              "docker compose -f docker-compose.prod.yml exec -T backend python -m backend.bulk_fetch",
               "cat > backend/ml/models/_run_ai_pipeline.py << '\''PYEOF'\''\nfrom backend.pipeline.alignment import align_news_for_symbol\nfrom backend.pipeline.layer0 import run_layer0\nfrom backend.pipeline.layer1 import run_layer1\n\nSYMBOLS = ['\''AAPL'\'', '\''BABA'\'', '\''GLD'\'', '\''NVDA'\'', '\''TSLA'\'']\n\nfor s in SYMBOLS:\n    print('\''=='\'', s, '\''=='\'')\n    print('\''align:'\'', align_news_for_symbol(s))\n    print('\''layer0:'\'', run_layer0(s))\n    print('\''layer1:'\'', run_layer1(s, max_articles=5000))\nPYEOF",
-              "ANTHROPIC_KEY=$(grep '\''^ANTHROPIC_API_KEY='\'' .env | cut -d= -f2); if [ -n \"$ANTHROPIC_KEY\" ] && [ \"$ANTHROPIC_KEY\" != \"your_anthropic_api_key_here\" ]; then echo Anthropic key detected, running AI pipeline; docker compose -f docker-compose.prod.yml exec -T backend python backend/ml/models/_run_ai_pipeline.py; docker compose -f docker-compose.prod.yml exec -T backend python -m backend.ml.model; else echo No Anthropic key configured yet, skipping AI pipeline; fi",
+              "cat > run_pipeline.sh << '\''SCRIPTEOF'\''\n#!/bin/bash\ncd /home/ubuntu/app\ndocker compose -f docker-compose.prod.yml exec -T backend python -m backend.migration\ndocker compose -f docker-compose.prod.yml exec -T backend python -m backend.bulk_fetch\nANTHROPIC_KEY=$(grep '\''^ANTHROPIC_API_KEY='\'' .env | cut -d= -f2)\nif [ -n \"$ANTHROPIC_KEY\" ] && [ \"$ANTHROPIC_KEY\" != \"your_anthropic_api_key_here\" ]; then\n  echo Anthropic key detected, running AI pipeline\n  docker compose -f docker-compose.prod.yml exec -T backend python /app/backend/ml/models/_run_ai_pipeline.py\n  docker compose -f docker-compose.prod.yml exec -T backend python -m backend.ml.model\nelse\n  echo No Anthropic key configured yet, skipping AI pipeline\nfi\nSCRIPTEOF",
+              "chmod +x run_pipeline.sh",
+              "nohup ./run_pipeline.sh > pipeline.log 2>&1 & disown",
               "docker image prune -af",
               "sudo nginx -t",
               "sudo systemctl reload nginx",
@@ -935,9 +395,9 @@ jobs:
 
       - name: Wait For Deployment
         run: |
-          echo "Waiting for SSM Command to finish (this can take a while if bulk_fetch/AI pipeline are running)..."
+          echo "Waiting for SSM Command to finish..."
 
-          for i in {1..120}; do
+          for i in {1..30}; do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "${{ env.COMMAND_ID }}" \
               --instance-id "${{ needs.infrastructure.outputs.instance }}" \
@@ -961,10 +421,10 @@ jobs:
             fi
 
             echo "Attempt $i: Status = $STATUS, still running..."
-            sleep 30
+            sleep 10
           done
 
-          echo "Timed out after 60 minutes waiting for deployment to finish."
+          echo "Timed out waiting for deployment to finish."
           exit 1
 
 ##################################################
@@ -1069,3 +529,559 @@ jobs:
           echo "===================================="
           echo "Production Deployment Successful"
           echo "===================================="
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# name: Production CI/CD
+
+# on:
+#   push:
+#     branches:
+#       - master
+
+# #############################################################
+# # Least Privilege Permissions
+# #############################################################
+
+# permissions:
+#   contents: read
+#   issues: write
+
+# env:
+#   AWS_REGION: us-east-1
+
+#   ###########################################################
+#   # Use HTTP initially.
+#   #
+#   # After manually configuring Certbot,
+#   # simply change http:// to https://
+#   ###########################################################
+#   DOMAIN: http://${{ secrets.DUCKDNS_SUBDOMAIN }}.duckdns.org
+# #############################################################
+# # Prevent multiple deployments running simultaneously
+# #############################################################
+
+# concurrency:
+#   group: production  
+#   cancel-in-progress: true
+
+# jobs:
+
+# #############################################################
+# # 1. STATIC APPLICATION SECURITY TESTING
+# #############################################################
+
+#   sast:
+#     name: SAST Scan
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Install Semgrep
+#         run: pip3 install --no-cache-dir semgrep
+
+#       - name: Run Semgrep
+#         continue-on-error: true
+#         run: |
+#           semgrep scan --config auto
+
+# #############################################################
+# # 2. BUILD & PUSH IMAGES
+# #############################################################
+
+#   build:
+#     name: Build Docker Images
+#     runs-on: ubuntu-latest
+
+#     needs: sast
+
+#     steps:
+
+#       - uses: actions/checkout@v4
+
+# ##################################################
+# # Login DockerHub
+# ##################################################
+
+#       - name: Login DockerHub
+#         run: |
+#           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login \
+#           --username "${{ secrets.DOCKER_USERNAME }}" \
+#           --password-stdin
+
+# ##################################################
+# # BACKEND
+# ##################################################
+
+#       - name: Build Backend
+#         run: |
+#           docker build \
+#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }} \
+#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest \
+#             ./backend
+
+#       - name: Push Backend
+#         run: |
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:${{ github.sha }}
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-backend:latest
+
+# ##################################################
+# # FRONTEND
+# ##################################################
+
+#       - name: Build Frontend
+#         run: |
+#           docker build \
+#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }} \
+#             -t ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest \
+#             ./frontend
+
+#       - name: Push Frontend
+#         run: |
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:${{ github.sha }}
+#           docker push ${{ secrets.DOCKER_USERNAME }}/pokieticker-frontend:latest
+
+# #############################################################
+# # 3. PROVISION INFRASTRUCTURE
+# #############################################################
+
+#   infrastructure:
+#     name: Provision Infrastructure
+#     runs-on: ubuntu-latest
+
+#     needs:
+#       - build
+
+#     outputs:
+#       instance: ${{ steps.outputs.outputs.instance }}
+#       public_ip: ${{ steps.outputs.outputs.public_ip }}
+#       subnet: ${{ steps.outputs.outputs.subnet }}
+#       vpc: ${{ steps.outputs.outputs.vpc }}
+
+#     steps:
+
+# ##################################################
+# # Checkout
+# ##################################################
+
+#       - uses: actions/checkout@v4
+
+# ##################################################
+# # Configure AWS
+# ##################################################
+
+#       - uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+# ##################################################
+# # Install Terraform
+# ##################################################
+
+#       - uses: hashicorp/setup-terraform@v3
+
+# ##################################################
+# # Terraform Format Check
+# ##################################################
+
+#       - name: Terraform Format
+#         working-directory: terraform-ec2
+#         run: terraform fmt -check -recursive
+
+# ##################################################
+# # Terraform Init
+# ##################################################
+
+#       - name: Terraform Init
+#         working-directory: terraform-ec2
+#         run: terraform init
+
+# ##################################################
+# # Terraform Validate
+# ##################################################
+
+#       - name: Terraform Validate
+#         working-directory: terraform-ec2
+#         run: terraform validate
+
+# ##################################################
+# # Terraform Plan
+# ##################################################
+
+#       - name: Terraform Plan
+#         working-directory: terraform-ec2
+#         run: terraform plan -out=tfplan
+
+# ##################################################
+# # Terraform Apply
+# ##################################################
+
+#       - name: Terraform Apply
+#         working-directory: terraform-ec2
+#         run: terraform apply -auto-approve tfplan
+
+# ##################################################
+# # Wait For EC2 Boot
+# ##################################################
+
+#       - name: Wait for EC2 Initialization
+#         run: |
+#           echo "Waiting for EC2 to boot..."
+#           sleep 60
+
+# ##################################################
+# # Wait Until SSM Registers Instance
+# ##################################################
+
+#       - name: Wait for SSM Registration
+#         working-directory: terraform-ec2
+#         run: |
+
+#           INSTANCE_ID=$(terraform output -raw instance_id)
+
+#           echo "Waiting for SSM registration..."
+
+#           for i in {1..30}; do
+
+#             STATUS=$(aws ssm describe-instance-information \
+#               --region ${{ env.AWS_REGION }} \
+#               --query "InstanceInformationList[?InstanceId=='$INSTANCE_ID'].PingStatus" \
+#               --output text)
+
+#             if [ "$STATUS" = "Online" ]; then
+#               echo "Instance is online in SSM."
+#               exit 0
+#             fi
+
+#             echo "Attempt $i: Instance not ready..."
+#             sleep 10
+
+#           done
+
+#           echo "Timed out waiting for SSM."
+#           exit 1
+
+# ##################################################
+# # Wait For Userdata Provisioning To Finish
+# #
+# # SSM being online only means the agent registered —
+# # it does NOT mean userdata.sh (Docker install, nginx
+# # setup, etc.) has finished running. Poll for the real
+# # completion marker instead of guessing with a sleep.
+# ##################################################
+
+#       - name: Wait for Provisioning Complete
+#         working-directory: terraform-ec2
+#         run: |
+#           INSTANCE_ID=$(terraform output -raw instance_id)
+#           echo "Waiting for userdata.sh to finish (Docker install, nginx setup)..."
+
+#           for i in {1..30}; do
+#             COMMAND_ID=$(aws ssm send-command \
+#               --instance-ids "$INSTANCE_ID" \
+#               --document-name "AWS-RunShellScript" \
+#               --parameters 'commands=["test -f /home/ubuntu/.provisioning-complete"]' \
+#               --query "Command.CommandId" --output text)
+
+#             sleep 5
+
+#             STATUS=$(aws ssm get-command-invocation \
+#               --command-id "$COMMAND_ID" \
+#               --instance-id "$INSTANCE_ID" \
+#               --query "Status" --output text 2>/dev/null || echo "Failed")
+
+#             if [ "$STATUS" = "Success" ]; then
+#               echo "Provisioning complete."
+#               exit 0
+#             fi
+
+#             echo "Attempt $i: still provisioning..."
+#             sleep 15
+#           done
+
+#           echo "Timed out waiting for provisioning to complete."
+#           exit 1
+
+# ##################################################
+# # Export Terraform Outputs
+# ##################################################
+
+#       - id: outputs
+#         working-directory: terraform-ec2
+#         run: |
+
+#           echo "instance=$(terraform output -raw instance_id)" >> $GITHUB_OUTPUT
+
+#           echo "public_ip=$(terraform output -raw instance_public_ip)" >> $GITHUB_OUTPUT
+
+#           echo "subnet=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
+
+#           echo "vpc=$(terraform output -raw vpc_id)" >> $GITHUB_OUTPUT
+
+# ##################################################
+# # Display Outputs
+# ##################################################
+
+#       - name: Display Outputs
+#         working-directory: terraform-ec2
+#         run: |
+
+#           echo "Instance ID : $(terraform output -raw instance_id)"
+#           echo "Public IP   : $(terraform output -raw instance_public_ip)"
+#           echo "Subnet      : $(terraform output -raw public_subnet_id)"
+#           echo "VPC         : $(terraform output -raw vpc_id)"
+
+# ##################################################
+# # Debug Secret Lengths
+# ##################################################
+
+#       - name: Debug Secret Lengths
+#         run: |
+#           echo "Subdomain length: ${#DUCKDNS_SUBDOMAIN}"
+#           echo "Token length: ${#DUCKDNS_TOKEN}"
+#         env:
+#           DUCKDNS_SUBDOMAIN: ${{ secrets.DUCKDNS_SUBDOMAIN }}
+#           DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+
+# ##################################################
+# # Update DuckDNS Record
+# ##################################################
+
+#       - name: Update DuckDNS
+#         env:
+#           DUCKDNS_SUBDOMAIN: ${{ secrets.DUCKDNS_SUBDOMAIN }}
+#           DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+#         run: |
+#           SUBDOMAIN=$(printf '%s' "$DUCKDNS_SUBDOMAIN" | tr -d '[:space:]')
+#           TOKEN=$(printf '%s' "$DUCKDNS_TOKEN" | tr -d '[:space:]')
+#           IP="${{ steps.outputs.outputs.public_ip }}"
+#           curl -s "https://www.duckdns.org/update?domains=${SUBDOMAIN}&token=${TOKEN}&ip=${IP}"
+
+# #############################################################
+# # 4. DEPLOY THROUGH AWS SSM
+# #############################################################
+
+#   deploy:
+#     name: Canary Deployment
+#     runs-on: ubuntu-latest
+
+#     needs: infrastructure
+
+#     steps:
+
+#       - uses: actions/checkout@v4
+
+#       - uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+# ##################################################
+# # Deploy Through AWS SSM
+# ##################################################
+#       - name: Deploy Application
+#         id: deploy
+#         run: |
+#           COMMAND_ID=$(aws ssm send-command \
+#             --instance-ids "${{ needs.infrastructure.outputs.instance }}" \
+#             --document-name "AWS-RunShellScript" \
+#             --comment "Production Deployment" \
+#             --query "Command.CommandId" \
+#             --output text \
+#             --parameters '{"commands":[
+#               "set -e",
+#               "export HOME=/root",
+#               "APP_DIR=/home/ubuntu/app",
+#               "mkdir -p $APP_DIR",
+#               "cd $APP_DIR",
+#               "git config --global --add safe.directory $APP_DIR",
+#               "if [ ! -d \".git\" ]; then git clone https://github.com/melvinsamuel070/PokieTicker-ssm-production.git .; else git fetch origin && git reset --hard origin/master; fi",
+#               "mkdir -p data data-canary backend/ml/models",
+#               "chown -R 100:101 data data-canary backend/ml/models",
+#               "cat > .env << '\''ENVEOF'\''\nDOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}\nPOLYGON_API_KEY=${{ secrets.POLYGON_API_KEY }}\nANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}\nENVEOF",
+#               "ls -la",
+#               "export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}",
+#               "echo \"${{ secrets.DOCKER_PASSWORD }}\" | docker login --username \"${{ secrets.DOCKER_USERNAME }}\" --password-stdin",
+#               "docker compose -f docker-compose.prod.yml pull",
+#               "docker compose -f docker-compose.prod.yml --profile canary up -d backend-canary frontend-canary",
+#               "sleep 30",
+#               "docker compose -f docker-compose.prod.yml ps",
+#               "docker compose -f docker-compose.prod.yml up -d backend frontend",
+#               "docker compose -f docker-compose.prod.yml exec -T backend python -m backend.migration",
+#               "docker compose -f docker-compose.prod.yml exec -T backend python -m backend.bulk_fetch",
+#               "cat > backend/ml/models/_run_ai_pipeline.py << '\''PYEOF'\''\nfrom backend.pipeline.alignment import align_news_for_symbol\nfrom backend.pipeline.layer0 import run_layer0\nfrom backend.pipeline.layer1 import run_layer1\n\nSYMBOLS = ['\''AAPL'\'', '\''BABA'\'', '\''GLD'\'', '\''NVDA'\'', '\''TSLA'\'']\n\nfor s in SYMBOLS:\n    print('\''=='\'', s, '\''=='\'')\n    print('\''align:'\'', align_news_for_symbol(s))\n    print('\''layer0:'\'', run_layer0(s))\n    print('\''layer1:'\'', run_layer1(s, max_articles=5000))\nPYEOF",
+#               "ANTHROPIC_KEY=$(grep '\''^ANTHROPIC_API_KEY='\'' .env | cut -d= -f2); if [ -n \"$ANTHROPIC_KEY\" ] && [ \"$ANTHROPIC_KEY\" != \"your_anthropic_api_key_here\" ]; then echo Anthropic key detected, running AI pipeline; docker compose -f docker-compose.prod.yml exec -T backend python backend/ml/models/_run_ai_pipeline.py; docker compose -f docker-compose.prod.yml exec -T backend python -m backend.ml.model; else echo No Anthropic key configured yet, skipping AI pipeline; fi",
+#               "docker image prune -af",
+#               "sudo nginx -t",
+#               "sudo systemctl reload nginx",
+#               "sudo certbot renew --quiet || true",
+#               "echo \"Deployment Complete\""
+#             ]}')
+#           echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+
+# ##################################################
+# # Wait For Deployment & Stream Logs on Failure
+# ##################################################
+
+#       - name: Wait For Deployment
+#         run: |
+#           echo "Waiting for SSM Command to finish (this can take a while if bulk_fetch/AI pipeline are running)..."
+
+#           for i in {1..120}; do
+#             STATUS=$(aws ssm get-command-invocation \
+#               --command-id "${{ env.COMMAND_ID }}" \
+#               --instance-id "${{ needs.infrastructure.outputs.instance }}" \
+#               --query "Status" --output text 2>/dev/null || echo "Pending")
+
+#             if [ "$STATUS" = "Success" ]; then
+#               echo "Deployment command completed successfully."
+#               exit 0
+#             fi
+
+#             if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+#               echo "=================================================="
+#               echo " CRITICAL: DEPLOYMENT COMMAND FAILED"
+#               echo "=================================================="
+#               aws ssm get-command-invocation \
+#                 --command-id "${{ env.COMMAND_ID }}" \
+#                 --instance-id "${{ needs.infrastructure.outputs.instance }}" \
+#                 --query "{Status:Status,Error:StandardErrorContent,Output:StandardOutputContent}" \
+#                 --output json
+#               exit 1
+#             fi
+
+#             echo "Attempt $i: Status = $STATUS, still running..."
+#             sleep 30
+#           done
+
+#           echo "Timed out after 60 minutes waiting for deployment to finish."
+#           exit 1
+
+# ##################################################
+# # Verify Deployment Statuss
+# ##################################################
+
+#       - name: Check Deployment Status
+#         run: |
+
+#           STATUS=$(aws ssm get-command-invocation \
+#             --command-id "${{ env.COMMAND_ID }}" \
+#             --instance-id "${{ needs.infrastructure.outputs.instance }}" \
+#             --query Status \
+#             --output text)
+
+#           echo "Deployment Completed with Status: $STATUS"
+
+# #############################################################
+# # 5. VERIFY DEPLOYMENT
+# #############################################################
+
+#   verify:
+#     name: Verify Deployment
+#     runs-on: ubuntu-latest
+
+#     needs:
+#       - deploy
+#       - infrastructure
+
+#     steps:
+
+# ##################################################
+# # Wait for Services
+# ##################################################
+
+#       - name: Wait
+#         run: sleep 60
+
+# ##################################################
+# # Configure AWS Credentials
+# ##################################################
+
+#       - uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ env.AWS_REGION }}
+
+# ##################################################
+# # Check Containers
+# ##################################################
+
+#       - name: Verify Containers
+#         run: |
+
+#           aws ssm send-command \
+#           --instance-ids "${{ needs.infrastructure.outputs.instance }}" \
+#           --document-name "AWS-RunShellScript" \
+#           --parameters commands='
+
+#           docker ps
+
+#           docker compose -f /home/ubuntu/app/docker-compose.prod.yml ps
+
+#           ' \
+#           --output text
+
+# ##################################################
+# # Verify Frontend
+# ##################################################
+
+#       - name: Verify Frontend
+#         run: |
+
+#           curl \
+#           --retry 10 \
+#           --retry-delay 10 \
+#           --retry-all-errors \
+#           --fail \
+#           ${{ env.DOMAIN }}
+
+# ##################################################
+# # Verify Backend API
+# ##################################################
+
+#       - name: Verify Backend
+#         run: |
+
+#           curl \
+#           --retry 10 \
+#           --retry-delay 10 \
+#           --retry-all-errors \
+#           --fail \
+#           ${{ env.DOMAIN }}/api/health
+
+# ##################################################
+# # Finished
+# ##################################################
+
+#       - name: Success
+#         run: |
+#           echo "===================================="
+#           echo "Production Deployment Successful"
+#           echo "===================================="
