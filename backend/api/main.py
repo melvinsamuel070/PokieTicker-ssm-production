@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.api.routers import stocks, news, analysis, predict
 
+raise RuntimeError("Intentional test failure to verify canary gating")
+
 app = FastAPI(title="PokieTicker", version="1.0.0")
 
 app.add_middleware(

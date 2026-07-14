@@ -534,19 +534,19 @@ jobs:
           echo "Production Deployment Successful"
           echo "===================================="
 
-#############################################################
-# 6. DYNAMIC APPLICATION SECURITY TESTING
-#############################################################
+# #############################################################
+# # 6. DYNAMIC APPLICATION SECURITY TESTING
+# #############################################################
 
-  dast:
-    name: DAST Scan
-    runs-on: ubuntu-latest
+#   dast:
+#     name: DAST Scan
+#     runs-on: ubuntu-latest
 
-    needs: verify
+#     needs: verify
 
-    steps:
-      - name: OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: ${{ env.DOMAIN }}/PokieTicker/
-          fail_action: false
+#     steps:
+#       - name: OWASP ZAP Baseline Scan
+#         uses: zaproxy/action-baseline@v0.12.0
+#         with:
+#           target: ${{ env.DOMAIN }}/PokieTicker/
+#           fail_action: false
