@@ -393,7 +393,6 @@ jobs:
               "echo \"Deployment Complete\""
             ]}')
           echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
 ##################################################
 # Wait For Deployment & Stream Logs on Failure
 ##################################################
