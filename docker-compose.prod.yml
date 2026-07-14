@@ -66,6 +66,19 @@ services:
     expose:
       - "8000"
 
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   frontend-canary:
     image: ${DOCKER_USERNAME}/pokieticker-frontend:latest
     container_name: pokieticker-frontend-canary
@@ -81,6 +94,21 @@ services:
 
     environment:
       VITE_API_TARGET: http://backend-canary:8000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
