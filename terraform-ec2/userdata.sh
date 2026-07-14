@@ -93,6 +93,10 @@ server {
 
     server_name _;
 
+    # CRITICAL: Prevent Nginx from leaking internal ports in redirects
+    port_in_redirect off;
+    absolute_redirect off;
+
     location /api/ {
         proxy_pass http://127.0.0.1:8000/api/;
         proxy_set_header Host $host;
@@ -107,6 +111,9 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Disable redirects rewriting the Host header
+        proxy_redirect off;
     }
 }
 NGINXEOF
