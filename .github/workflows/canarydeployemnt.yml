@@ -534,9 +534,9 @@ jobs:
           echo "Production Deployment Successful"
           echo "===================================="
 
-#############################################################
-# 6. DYNAMIC APPLICATION SECURITY TESTING
-#############################################################
+# #############################################################
+# # 6. DYNAMIC APPLICATION SECURITY TESTING (DAST)
+# #############################################################
 
   dast:
     name: DAST Scan
@@ -548,6 +548,10 @@ jobs:
       - name: OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: ${{ env.DOMAIN }}/PokieTicker/
+          # 1. Scan the root domain where your application is served
+          target: ${{ env.DOMAIN }}
+          
+          # 2. Force the Docker container to run as root to solve [Errno 13] Permission Denied
+          cmd_options: '-u root'
+          
           fail_action: false
-          cmd_options: '-I'
