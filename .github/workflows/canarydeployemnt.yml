@@ -538,15 +538,9 @@ jobs:
 # 6. DYNAMIC APPLICATION SECURITY TESTING
 #############################################################
 
-  dast:
-    name: DAST Scan
-    runs-on: ubuntu-latest
-
-    needs: verify
-
-    steps:
       - name: OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: ${{ env.DOMAIN }}/PokieTicker/
           fail_action: false
+          cmd_options: '-I'
