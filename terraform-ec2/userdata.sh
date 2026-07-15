@@ -88,32 +88,25 @@ systemctl restart amazon-ssm-agent || true
 
 cat > /etc/nginx/sites-available/pokieticker << 'NGINXEOF'
 server {
-    listen 80;
-    listen [::]:80;
-
+    listen 7777;
     server_name _;
 
-    # CRITICAL: Prevent Nginx from leaking internal ports in redirects
-    port_in_redirect off;
     absolute_redirect off;
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000/api/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+    location /PokieTicker/ {
+        alias /usr/share/nginx/html/;
+        index index.html;
+        try_files $uri $uri/ /PokieTicker/index.html;
     }
 
-    location / {
-        proxy_pass http://127.0.0.1:7777/;
+    location /api/ {
+        proxy_pass http://backend:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Disable redirects rewriting the Host header
-        proxy_redirect off;
+    }
+
+    location = / {
+        return 301 /PokieTicker/;
     }
 }
 NGINXEOF
