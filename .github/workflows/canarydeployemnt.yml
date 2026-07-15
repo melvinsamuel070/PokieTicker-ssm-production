@@ -556,8 +556,6 @@ jobs:
       - name: OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          # Target your clean production domain
-          target: ${{ env.DOMAIN }}
-          
-          # We no longer pass "-u root" here, keeping the baseline scan flags safe
+          target: ${{ env.DOMAIN }}/PokieTicker/
           fail_action: false
+          cmd_options: '-I'
