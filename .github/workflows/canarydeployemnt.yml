@@ -559,3 +559,4 @@ jobs:
           target: ${{ env.DOMAIN }}/PokieTicker/
           fail_action: false
           cmd_options: '-I'
+          artifact_name: 'zap-scan-report'
