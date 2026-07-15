@@ -538,6 +538,35 @@ jobs:
 # # 6. DYNAMIC APPLICATION SECURITY TESTING (DAST)
 # #############################################################
 
+  # dast:
+  #   name: DAST Scan
+  #   runs-on: ubuntu-latest
+
+  #   needs: verify
+
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v4
+
+  #     # FIX: Grant full write permissions to the workspace so the non-root ZAP container can write its report files
+  #     - name: Fix Directory Permissions for ZAP
+  #       run: |
+  #         chmod -R 777 ${{ github.workspace }}
+
+  #     - name: OWASP ZAP Baseline Scan
+  #       continue-on-error: true
+  #       uses: zaproxy/action-baseline@v0.12.0
+  #       with:
+  #         target: ${{ env.DOMAIN }}/PokieTicker/
+  #         fail_action: false
+  #         cmd_options: '-I'
+
+
+
+  # #############################################################
+# # 6. DYNAMIC APPLICATION SECURITY TESTING (DAST)
+# #############################################################
+
   dast:
     name: DAST Scan
     runs-on: ubuntu-latest
@@ -548,15 +577,26 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # FIX: Grant full write permissions to the workspace so the non-root ZAP container can write its report files
+      # Grant full permissions to the workspace so ZAP can write the files
       - name: Fix Directory Permissions for ZAP
         run: |
           chmod -R 777 ${{ github.workspace }}
 
       - name: OWASP ZAP Baseline Scan
-        continue-on-error: true
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: ${{ env.DOMAIN }}/PokieTicker/
+          target: ${{ env.DOMAIN }}
+          # 1. CRITICAL: Disable the built-in broken artifact upload
+          artifact_name: ""
           fail_action: false
-          cmd_options: '-I'
+
+      # 2. Upload the reports manually using the fully supported Actions v4 Uploader
+      - name: Upload ZAP Reports
+        if: always() # Run this even if ZAP found warnings or minor script errors
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-security-report
+          path: |
+            report_json.json
+            report_md.md
+            report_html.html
