@@ -1,4 +1,4 @@
-#!/bin/bash
+ !/bin/bash
 set -euxo pipefail
 
 ##################################################
@@ -79,18 +79,11 @@ systemctl enable amazon-ssm-agent || true
 systemctl restart amazon-ssm-agent || true
 
 ##################################################
-# Configure Nginx — PokieTicker reverse proxy (HOST-LEVEL)
-#
-# This runs on the EC2 host itself, listening on the
-# public port 80. It is NOT the same as
-# frontend/nginx.conf, which runs INSIDE the frontend
-# Docker container on port 7777 and handles the
-# /PokieTicker/ SPA routing + the / -> /PokieTicker/
-# redirect.
+# Configure Nginx — PokieTicker reverse proxy
 #
 # Routes:
-#   /api/ -> backend container directly (127.0.0.1:8000)
-#   /     -> frontend container (127.0.0.1:7777)
+#   /api/ -> backend container directly (health checks etc)
+#   /     -> frontend container (static SPA)
 ##################################################
 
 cat > /etc/nginx/sites-available/pokieticker << 'NGINXEOF'
@@ -116,7 +109,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
-NGINXEOF 
+NGINXEOF
 
 ln -sf /etc/nginx/sites-available/pokieticker /etc/nginx/sites-enabled/pokieticker
 rm -f /etc/nginx/sites-enabled/default
@@ -147,3 +140,36 @@ touch /home/ubuntu/.provisioning-complete
 chown ubuntu:ubuntu /home/ubuntu/.provisioning-complete
 
 echo "Provisioning completed successfully."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
